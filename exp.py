@@ -156,7 +156,11 @@ def custom_llr(val):
     if abs(val) == 1.: return val
     return np.log((1 + val)/(1 - val))
 
-def SPA(H, r, SNR, max_iter = 10, threshold = 0.5):
+@np.vectorize
+def custom_tanh(M):
+    return np.tanh(M)
+
+def SPA(H, r, SNR, max_iter = 10, threshold = 1.):
     
     M = np.copy(H).astype(float)
     E = np.zeros(H.shape)
@@ -168,7 +172,7 @@ def SPA(H, r, SNR, max_iter = 10, threshold = 0.5):
     for k in range(max_iter):
         #print(k)
         
-        M = np.tanh(M/2) + H_inv
+        M = custom_tanh(M/2) + H_inv
         t = np.prod(M, axis = 1) 
         for j in range(H.shape[1]):
             E[:, j] = t * H[:, j]
@@ -179,7 +183,7 @@ def SPA(H, r, SNR, max_iter = 10, threshold = 0.5):
         belief = np.sum(E, axis = 0) + r
         #print(belief)
         M = (H != 0) * (belief - E)
-
+        #print(k, sum(H @ demodulate(belief) % 2))
         if (sum(H @ demodulate(belief) % 2) == 0):
             return belief
         if (np.prod(np.abs(belief) > threshold)):
@@ -263,7 +267,7 @@ class experiment:
 
 R = 1/4
 rv = 0
-exp = experiment(n_set = 1, Z = 12, R = R, alg = 'MSA')
+exp = experiment(n_set = 1, Z = 12, R = R, alg = 'SPA')
 f = open("results_{:.3f}_{}.txt".format(R, rv), "a")
 
 for SNR in np.arange(0., 10.01, 0.25):
