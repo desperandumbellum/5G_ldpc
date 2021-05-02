@@ -1,0 +1,13 @@
+Executable = condor.py
+Universe = vanilla
+Log = log_$(Process).log
+output = log_$(Process).out
+error = log_$(Process).err
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = myH.npy
+
+Arguments = $(Process)
+Queue 492
+
