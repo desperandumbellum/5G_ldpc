@@ -46,7 +46,7 @@ def H_disassemble(H, Z):
     assert D.shape[0] + B.shape[0] == m
     assert E.shape[0] + T.shape[0] == m
     assert sum(sum(E)) == 0
-    assert sum(sum(np.eye(m - g) - T)) == 0
+    #assert sum(sum(np.eye(m - g) - T)) == 0
 
     D_inv = inv(D.astype(int))
     F = (D_inv @ C % 2).astype(bool)
@@ -86,9 +86,12 @@ def convolution(d, Z, shift, L):
         v = np.hstack((d_cut[shift:], list(d_cut) * n_repeat, d_cut[:last_len]))
     return v
     
-def involution(l, Z, shift):
+def involution(l, Z, R, shift):
     L = len(l)
-    r = np.zeros(66 * Z)
+    if(R <= 1/3):
+        r = np.zeros(66 * Z)
+    else:
+        r = np.zeros(get_L(R)*Z)
     
 
     exp_start = shift
@@ -128,12 +131,12 @@ def encoder(H, Z, SNR, d, L = 300, rv = 1, seed = 2021):
     y = x + e
     return y
 
-def decoder(H, y, Z, SNR, rv = 1, alg = 'MSA'):
+def decoder(H, y, Z, R, SNR, rv = 1, alg = 'MSA'):
     sigma = 10 ** (- SNR / 20)
     l = 2 * y / (sigma**2)
     
     shift = get_shift(rv = rv, Z = Z)
-    r = involution(l, Z, shift)
+    r = involution(l, Z, R, shift)
     r = np.where(r != 0, r, awgn(scale = sigma)) #workaround
 
     if alg == 'MSA':
@@ -232,13 +235,25 @@ def MSA(H, r, SNR, max_iter = 30, threshold = 1.):
 
 
 # In[620]:
+def get_L(R):
+    K_b = 22
+    T_b = int(K_b / R)
+    return T_b
+
+def cut_L(R):
+    return 66 - get_L(R)
+
+def cut_H(H, R, Z):
+    return H[:-Z*cut_L(R), :-Z*cut_L(R)]
 
 
-def parse_H(n_set, Z):
+def parse_H(n_set, R, Z):
     #№№filler = np.vectorize(get_submatrix, otypes = [np.ndarray], signature = '()->(n,n)', excluded = (1,))
     #atrix = np.loadtxt('matrices/R1-1711982_BG1_set{}.csv'.format(n_set), dtype = int)
     #H = np.block([[x for x in row] for row in filler(matrix, Z)])
     H = np.load('myH.npy')
+    if(R > 1/3):
+        H = cut_H(H, R, Z)
     F, A, B = H_disassemble(H, Z)
     return H, F, A, B
 
@@ -248,7 +263,8 @@ class experiment:
         self.Z = Z
         self.L = int(22*self.Z/R)
         self.alg = alg
-        self.H, self.F, self.A, self.B = parse_H(self.n_set, self.Z)
+        self.R = R
+        self.H, self.F, self.A, self.B = parse_H(self.n_set, R, self.Z)
         
     def run(self, seed, rv):
         np.random.seed(seed = seed)
@@ -256,7 +272,7 @@ class experiment:
         d = get_codevector(tx, self.F, self.A, self.B)
 
         y = encoder(self.H, self.Z, self.SNR, d, L = self.L, rv = rv, seed = seed)
-        u = decoder(self.H, y, self.Z, self.SNR, rv = rv, alg = self.alg)
+        u = decoder(self.H, y, self.Z, self.R, self.SNR, rv = rv, alg = self.alg)
         rx = u[:self.F.shape[1]]
 
         res = '{}\t{}\t{:.3f}\t{:.6f}\t{:.6f}\t{}\t{}\n'.format(self.SNR, rv, (len(tx)/self.L), abs(sum(d - u)/len(d)), abs(sum(rx - tx)/len(tx)), sum(d - u) == 0, sum(rx - tx) == 0)
@@ -268,9 +284,9 @@ class experiment:
 
 # In[623]:
 
-SNR_list = np.arange(-3.50, 6.51, 0.25)
+SNR_list = [10]
 rv_list = [0, 1, 2, 3]
-R_list = [1/3, 1/4, 1/5]
+R_list = [1/4, 1/3, 2/3, 3/4, 5/6, 11/12]
 
 z = list(itertools.product(*[SNR_list, rv_list, R_list]))
 
@@ -281,11 +297,11 @@ SNR = config[0]
 R = config[2]
 
 
-exp = experiment(n_set = 1, Z = 12, R = R, alg = 'SPA')
-f = open("results_SPA_{:.2f}_{:.3f}_{}.txt".format(SNR, R, rv), "a")
+exp = experiment(n_set = 1, Z = 12, R = R, alg = 'MSA')
+f = open("results_MSA_{:.2f}_{:.3f}_{}.txt".format(SNR, R, rv), "a")
 
 exp.set_SNR(SNR)
-for seed in range(0, 1000, 1):
+for seed in range(0, 10, 1):
   seed += 1000000
   res = exp.run(seed = seed, rv = rv)
   f.write(res)
