@@ -266,17 +266,22 @@ class experiment:
         self.R = R
         self.H, self.F, self.A, self.B = parse_H(self.n_set, R, self.Z)
         
-    def run(self, seed, rv):
+    def run(self, HARQ, seed):
         np.random.seed(seed = seed)
         tx = np.random.randint(low = 0, high = 2, size = self.F.shape[1])
         d = get_codevector(tx, self.F, self.A, self.B)
+        
+        for k in range(len(HARQ)):
+            rv = int(HARQ[k])
+            y = encoder(self.H, self.Z, self.SNR, d, L = self.L, rv = rv, seed = seed)
+            u = decoder(self.H, y, self.Z, self.R, self.SNR, rv = rv, alg = self.alg)
+            rx = u[:self.F.shape[1]]
+            res = '{}\t{}\t{:.3f}\t{:.6f}\t{:.6f}\t{}\t{}\n'.format(self.SNR, ''.join(HARQ[:k+1]), (len(tx)/self.L), abs(sum(d - u)/len(d)), abs(sum(rx - tx)/len(tx)), sum(d - u) == 0, sum(rx - tx) == 0)
+            f.write(res)
 
-        y = encoder(self.H, self.Z, self.SNR, d, L = self.L, rv = rv, seed = seed)
-        u = decoder(self.H, y, self.Z, self.R, self.SNR, rv = rv, alg = self.alg)
-        rx = u[:self.F.shape[1]]
-
-        res = '{}\t{}\t{:.3f}\t{:.6f}\t{:.6f}\t{}\t{}\n'.format(self.SNR, rv, (len(tx)/self.L), abs(sum(d - u)/len(d)), abs(sum(rx - tx)/len(tx)), sum(d - u) == 0, sum(rx - tx) == 0)
-        return res
+            if (sum(rx - tx) == 0):
+                break
+        return
         
     def set_SNR(self, SNR):
         self.SNR = SNR
@@ -285,26 +290,25 @@ class experiment:
 # In[623]:
 
 SNR_list = np.arange(0.0, 20.01, 0.25)
-rv_list = [0, 1, 2, 3]
-R_list = [1/4, 1/3, 2/3, 3/4, 5/6, 11/12]
+HARQ_list = [['0','0','0'], ['0','0','1'], ['0','1','0'], ['0', '1', '1']]
+R_list = [1/5, 1/4, 1/3, 1/2, 2/3, 3/4, 5/6, 11/12]
 
-z = list(itertools.product(*[SNR_list, rv_list, R_list]))
+z = list(itertools.product(*[SNR_list, HARQ_list, R_list]))
 
 pid = int(sys.argv[1])
 config = z[pid]
-rv = config[1]
 SNR = config[0]
+HARQ = config[1]
 R = config[2]
 
 
 exp = experiment(n_set = 1, Z = 12, R = R, alg = 'MSA')
-f = open("results_MSA_{:.2f}_{:.3f}_{}.txt".format(SNR, R, rv), "a")
+f = open("results_MSA_{:.2f}_{:.3f}_{}.txt".format(SNR, R, ''.join(HARQ)), "a")
 
 exp.set_SNR(SNR)
-for seed in range(0, 10, 1):
-  seed += 1000000
-  res = exp.run(seed = seed, rv = rv)
-  f.write(res)
+for seed in range(0, 1000, 1):
+  seed += 3000000
+  exp.run(seed = seed, HARQ = HARQ)
 f.close()
 
 
